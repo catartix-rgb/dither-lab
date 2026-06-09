@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DITHER LAB</title>
+<style>
+  :root{
+    --bg:#08080a; --panel:#0e0e11; --panel2:#16161b; --line:#222228;
+    --txt:#e6e6ec; --mut:#6f6f7a; --dim:#4a4a54; --acc:#ff5a4d; --acc2:#7aa2ff;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--txt); overflow:hidden;
+    font-family:ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
+    -webkit-font-smoothing:antialiased; font-size:12px;
+  }
+  #app{display:flex; height:100vh; width:100vw}
+
+  /* ---------- Sidebar ---------- */
+  #side{
+    width:300px; min-width:300px; height:100%; background:var(--panel);
+    border-right:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden;
+  }
+  .brand{padding:14px 16px 12px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:9px}
+  .logo{width:18px; height:18px; border-radius:5px;
+    background:conic-gradient(from 0deg,#ff5a4d,#ffd25c,#7aff9e,#7aa2ff,#c87aff,#ff5a4d);
+    box-shadow:0 0 12px rgba(255,120,90,.45)}
+  .brand h1{font-size:13px; letter-spacing:2.5px; font-weight:800}
+  .brand .ver{font-size:9px; color:var(--dim); margin-left:2px}
+  .tabs{display:flex; gap:14px; margin-left:auto}
+  .tabs button{background:none; border:none; color:var(--dim); font-family:inherit; font-size:10px;
+    letter-spacing:.5px; cursor:pointer; padding:2px 0; border-bottom:1.5px solid transparent}
+  .tabs button:hover{color:var(--mut)}
+  .tabs button.on{color:var(--txt); border-bottom-color:var(--acc)}
+
+  .scroll{overflow-y:auto; flex:1; padding:6px 16px 10px}
+  .scroll::-webkit-scrollbar{width:7px}
+  .scroll::-webkit-scrollbar-thumb{background:#26262e; border-radius:4px}
+
+  .grp{padding:14px 0 4px; border-top:1px solid var(--line)}
+  .grp:first-child{border-top:none}
+  .grp-h{font-size:10px; letter-spacing:2px; color:var(--txt); text-transform:uppercase; margin-bottom:12px;
+    display:flex; align-items:center; gap:8px; font-weight:700}
+  .grp-h::before{content:""; width:5px; height:5px; border-radius:50%; background:var(--acc)}
+
+  .ctrl{margin-bottom:13px}
+  .ctrl .row{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px}
+  .ctrl label{font-size:10px; color:var(--mut); letter-spacing:.5px; text-transform:uppercase}
+  .ctrl .val{font-size:11px; color:var(--txt); font-variant-numeric:tabular-nums}
+
+  input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:3px; border-radius:3px;
+    background:#26262e; outline:none; cursor:pointer}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:13px; height:13px; border-radius:3px;
+    background:var(--txt); cursor:pointer; transition:transform .1s}
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15)}
+
+  select{font-family:inherit; background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:6px; font-size:11px; padding:8px 10px; cursor:pointer; outline:none; width:100%}
+  select:hover{border-color:var(--acc2)}
+
+  .field{margin-bottom:12px}
+  .field>label{font-size:10px; color:var(--mut); letter-spacing:.5px; text-transform:uppercase; display:block; margin-bottom:6px}
+
+  .swatches{display:flex; gap:6px}
+  .swatches .sw{flex:1; height:26px; border-radius:5px; border:1px solid var(--line)}
+
+  .colorrow{display:flex; align-items:center; justify-content:space-between}
+  input[type=color]{width:34px; height:24px; padding:0; border:1px solid var(--line); border-radius:5px; background:none; cursor:pointer}
+
+  .toggle{display:flex; align-items:center; gap:10px; font-size:10px; color:var(--mut); letter-spacing:.5px;
+    text-transform:uppercase; padding:2px 0; cursor:pointer; user-select:none; margin-bottom:6px}
+  .tg{width:34px; height:18px; border-radius:10px; background:#26262e; position:relative; transition:.18s; flex:none}
+  .tg::after{content:""; position:absolute; width:12px; height:12px; border-radius:50%; background:#7a7a86; top:3px; left:3px; transition:.18s}
+  .toggle.on .tg{background:var(--acc)}
+  .toggle.on .tg::after{left:19px; background:#fff}
+
+  .help{font-size:9.5px; color:var(--dim); line-height:1.55; margin:-2px 0 4px}
+
+  .foot{padding:11px 16px; border-top:1px solid var(--line); font-size:9px; color:var(--dim); line-height:1.7}
+  .foot b{color:var(--mut); font-weight:700}
+  .btns{display:flex; gap:7px; margin-bottom:10px}
+  .btns button{flex:1; font-family:inherit; background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:6px; font-size:10px; letter-spacing:.5px; padding:9px 6px; cursor:pointer; text-transform:uppercase; font-weight:600}
+  .btns button:hover{border-color:var(--acc2)}
+  .btns .pri{background:var(--acc); border-color:var(--acc); color:#1a0805}
+  .btns .pri:hover{filter:brightness(1.1)}
+
+  /* ---------- Stage ---------- */
+  #stage{flex:1; position:relative; display:flex; align-items:center; justify-content:center; background:#050506; overflow:hidden}
+  #c{max-width:100%; max-height:100%}
+  #status{position:absolute; left:14px; bottom:12px; font-size:10px; color:var(--mut);
+    background:rgba(0,0,0,.45); padding:5px 9px; border-radius:5px; letter-spacing:.5px; pointer-events:none}
+  #fps{position:absolute; top:12px; right:14px; font-size:10px; color:var(--mut);
+    background:rgba(0,0,0,.45); padding:4px 8px; border-radius:5px; letter-spacing:.5px; pointer-events:none}
+  #drophint{position:absolute; inset:0; display:none; align-items:center; justify-content:center; font-size:13px;
+    color:var(--txt); letter-spacing:1px; background:rgba(255,90,77,.12); border:2px dashed var(--acc)}
+  #drophint.show{display:flex}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="brand">
+      <div class="logo"></div>
+      <h1>DITHER LAB</h1><span class="ver">v1.2</span>
+      <div class="tabs" id="modes">
+        <button data-v="halftone" class="on">halftone</button>
+        <button data-v="dither">dither</button>
+        <button data-v="heatmap">heatmap</button>
+      </div>
+    </div>
+
+    <div class="scroll">
+      <!-- SOURCE -->
+      <div class="grp">
+        <div class="grp-h">01 · Source</div>
+        <div class="field">
+          <label>Origen</label>
+          <select id="source">
+            <option value="noise">Noise field (líquido metálico)</option>
+            <option value="image">Imagen</option>
+          </select>
+        </div>
+        <div class="help">Noise field genera un campo de ruido animado y deformado — el look metálico líquido. Carga una imagen o pulsa Randomize.</div>
+      </div>
+
+      <!-- NOISE FIELD -->
+      <div class="grp" id="noiseGrp">
+        <div class="grp-h">02 · Noise field</div>
+        <div class="ctrl">
+          <div class="row"><label>Scale</label><span class="val" id="v-nScale"></span></div>
+          <input type="range" id="nScale" min="1" max="12" step="0.1" value="2.6">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label>Warp (domain)</label><span class="val" id="v-nWarp"></span></div>
+          <input type="range" id="nWarp" min="0" max="2" step="0.01" value="0.85">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label>Detail (octavas)</label><span class="val" id="v-nOct"></span></div>
+          <input type="range" id="nOct" min="1" max="6" step="1" value="3">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label>Metallic veins</label><span class="val" id="v-nVeins"></span></div>
+          <input type="range" id="nVeins" min="0" max="1" step="0.01" value="0.45">
+        </div>
+      </div>
+
+      <!-- COLOR -->
+      <div class="grp">
+        <div class="grp-h">03 · Color</div>
+        <div class="field">
+          <label>Color desde</label>
+          <select id="colorFrom">
+            <option value="image">Colores de la imagen</option>
+            <option value="map">Colormap</option>
+            <option value="mono">Monocromo</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Colormap</label>
+          <select id="colormap">
+            <option value="spectral">Rainbow / spectral</option>
+            <option value="iris">Iridiscente</option>
+            <option value="magma">Magma / fuego</option>
+            <option value="viridis">Viridis</option>
+            <option value="ocean">Océano / hielo</option>
+            <option value="mono">Mono</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Base palette</label>
+          <div class="swatches" id="swatches"><div class="sw"></div><div class="sw"></div><div class="sw"></div><div class="sw"></div></div>
+        </div>
+        <div class="field colorrow">
+          <label style="margin:0">Fondo</label>
+          <input type="color" id="bg" value="#050506">
+        </div>
+        <div class="toggle" id="invVal" data-k="invertValues"><div class="tg"></div>Invertir valores</div>
+      </div>
+
+      <!-- DOTS -->
+      <div class="grp">
+        <div class="grp-h">04 · Dots</div>
+        <div class="field">
+          <label>Tamaño del punto según</label>
+          <select id="sizeFrom">
+            <option value="value">Fijo — color = valor</option>
+            <option value="bright">Brillo</option>
+            <option value="uniform">Uniforme</option>
+          </select>
+        </div>
+        <div class="ctrl">
+          <div class="row"><label>Dot scale</label><span class="val" id="v-dotScale"></span></div>
+          <input type="range" id="dotScale" min="0.1" max="3" step="0.01" value="1.06">
+        </div>
+        <div class="toggle" id="invDot" data-k="invertDot"><div class="tg"></div>Invertir tamaño</div>
+      </div>
+
+      <!-- TONE -->
+      <div class="grp">
+        <div class="grp-h">05 · Tone</div>
+        <div class="ctrl">
+          <div class="row"><label>Brightness</label><span class="val" id="v-brightness"></span></div>
+          <input type="range" id="brightness" min="-1" max="1" step="0.01" value="-0.10">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label>Contrast</label><span class="val" id="v-contrast"></span></div>
+          <input type="range" id="contrast" min="0" max="3" step="0.01" value="1.52">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label>Gamma</label><span class="val" id="v-gamma"></span></div>
+          <input type="range" id="gamma" min="0.2" max="3" step="0.01" value="0.80">
+        </div>
+      </div>
+
+      <!-- MOTION -->
+      <div class="grp">
+        <div class="grp-h">06 · Motion</div>
+        <div class="toggle on" id="animate" data-k="animate"><div class="tg"></div>Animate</div>
+        <div class="ctrl">
+          <div class="row"><label>Speed</label><span class="val" id="v-speed"></span></div>
+          <input type="range" id="speed" min="0" max="3" step="0.01" value="0.60">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label>Flow (imagen)</label><span class="val" id="v-flow"></span></div>
+          <input type="range" id="flow" min="0" max="100" step="1" value="55">
+        </div>
+        <div class="help">El flow deforma la imagen con el campo animado — súbelo + Randomize para variaciones infinitas.</div>
+      </div>
+
+      <!-- MASK -->
+      <div class="grp">
+        <div class="grp-h">07 · Mask</div>
+        <div class="ctrl">
+          <div class="row"><label>Center fade</label><span class="val" id="v-centerFade"></span></div>
+          <input type="range" id="centerFade" min="0" max="100" step="1" value="0">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label>Dissolve</label><span class="val" id="v-dissolve"></span></div>
+          <input type="range" id="dissolve" min="0" max="100" step="1" value="49">
+        </div>
+        <div class="help">Center fade abre un hueco en el centro. Dissolve dispersa los puntos orgánicamente alrededor del borde.</div>
+      </div>
+
+      <!-- GRID -->
+      <div class="grp">
+        <div class="grp-h">08 · Grid</div>
+        <div class="ctrl">
+          <div class="row"><label>Cell size</label><span class="val" id="v-cell"></span></div>
+          <input type="range" id="cell" min="4" max="48" step="1" value="16">
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <div class="btns">
+        <button class="pri" id="randomize">Randomize</button>
+        <button id="export">Export</button>
+      </div>
+      <input type="file" id="file" accept="image/*" hidden>
+      <button style="width:100%;font-family:inherit;background:var(--panel2);color:var(--mut);border:1px dashed var(--line);border-radius:6px;font-size:10px;padding:9px;cursor:pointer;letter-spacing:.5px;text-transform:uppercase" id="loadBtn">Cargar imagen</button>
+      <div style="margin-top:9px"><b>Space</b> play/pausa · <b>R</b> randomize · <b>E</b> export · arrastra una imagen al lienzo</div>
+    </div>
+  </aside>
+
+  <main id="stage">
+    <canvas id="c"></canvas>
+    <div id="status">—</div>
+    <div id="fps">— fps</div>
+    <div id="drophint">Suelta la imagen aquí</div>
+  </main>
+</div>
+
+<script>
+(()=>{
+  const canvas=document.getElementById('c'), ctx=canvas.getContext('2d',{alpha:false});
+  const statusEl=document.getElementById('status'), fpsEl=document.getElementById('fps');
+  // offscreen source buffer (low-res) for warped sampling
+  const sbuf=document.createElement('canvas'), sctx=sbuf.getContext('2d',{willReadFrequently:true});
+
+  const S={
+    source:'noise', nScale:2.6, nWarp:0.85, nOctaves:3, nVeins:0.45,
+    mode:'halftone', colorFrom:'image', colormap:'spectral', bg:'#050506',
+    invertValues:false, sizeFrom:'value', dotScale:1.06, invertDot:false,
+    brightness:-0.10, contrast:1.52, gamma:0.80,
+    animate:true, speed:0.60, flow:55,
+    centerFade:0, dissolve:49, cell:16
+  };
+
+  let img=null, srcData=null, sbw=0, sbh=0, t=0, playing=true, flowSeed=Math.random()*1000;
+  let noiseSeed=Math.random()*1000, cols=0, rows=0;
+
+  // ---------- controls ----------
+  function slider(id,key,fmt){
+    const el=document.getElementById(id), out=document.getElementById('v-'+id);
+    const upd=()=>{ S[key]=parseFloat(el.value); if(out) out.textContent=fmt?fmt(S[key]):S[key]; if(!playing) render(); };
+    el.addEventListener('input',upd); upd();
+  }
+  slider('dotScale','dotScale',v=>v.toFixed(2)+'×');
+  slider('brightness','brightness',v=>(v>=0?'+':'')+v.toFixed(2));
+  slider('contrast','contrast',v=>v.toFixed(2));
+  slider('gamma','gamma',v=>v.toFixed(2));
+  slider('speed','speed',v=>v.toFixed(2)+'×');
+  slider('flow','flow',v=>Math.round(v)+'%');
+  slider('centerFade','centerFade',v=>Math.round(v)+'%');
+  slider('dissolve','dissolve',v=>Math.round(v)+'%');
+  slider('cell','cell',v=>Math.round(v)+'px');
+  slider('nScale','nScale',v=>v.toFixed(1));
+  slider('nWarp','nWarp',v=>v.toFixed(2));
+  slider('nOct','nOctaves',v=>Math.round(v));
+  slider('nVeins','nVeins',v=>Math.round(v*100)+'%');
+
+  function dropdown(id,key,after){ const el=document.getElementById(id);
+    el.addEventListener('change',()=>{ S[key]=el.value; if(after)after(); if(!playing)render(); }); }
+  dropdown('colorFrom','colorFrom');
+  dropdown('colormap','colormap',updateSwatches);
+  dropdown('sizeFrom','sizeFrom');
+  dropdown('source','source',()=>{ document.getElementById('noiseGrp').style.display = S.source==='noise'?'':'none';
+    if(S.source==='noise' && !img) sizeNoiseCanvas();
+    else if(S.source==='image' && !imgLoaded) generateBackground(); });
+  let imgLoaded=false;
+  function sizeNoiseCanvas(){ canvas.width=960; canvas.height=720; }
+
+  function toggle(id){ const el=document.getElementById(id), k=el.dataset.k;
+    el.addEventListener('click',()=>{ el.classList.toggle('on'); S[k]=el.classList.contains('on');
+      if(k==='animate'){ playing=S.animate; if(playing) loop(); else render(); }
+      else if(!playing) render(); }); }
+  toggle('invVal'); toggle('invDot'); toggle('animate');
+
+  document.getElementById('bg').addEventListener('input',e=>{ S.bg=e.target.value; if(!playing)render(); });
+
+  document.querySelectorAll('#modes button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('#modes button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); S.mode=b.dataset.v; if(!playing)render();
+  }));
+
+  // ---------- colormaps ----------
+  function hsl2rgb(h,s,l){ h=((h%360)+360)%360/360; const a=s*Math.min(l,1-l);
+    const f=n=>{const k=(n+h*12)%12; return l-a*Math.max(-1,Math.min(k-3,9-k,1));};
+    return [f(0)*255,f(8)*255,f(4)*255]; }
+  function lerp(a,b,m){ return [a[0]+(b[0]-a[0])*m,a[1]+(b[1]-a[1])*m,a[2]+(b[2]-a[2])*m]; }
+  const STOPS={
+    magma:[[0,0,4],[40,11,84],[101,21,110],[183,55,84],[251,136,97],[252,253,191]],
+    viridis:[[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]],
+    ocean:[[3,4,30],[12,44,96],[20,110,174],[64,196,210],[224,255,250]],
+  };
+  function rampSample(stops,v){ const n=stops.length-1, p=Math.max(0,Math.min(0.9999,v))*n, i=p|0; return lerp(stops[i],stops[i+1],p-i); }
+  function colormap(name,v){
+    if(name==='spectral') return hsl2rgb(255-v*295, .95, .12+v*0.5);
+    if(name==='iris')     return hsl2rgb(200+v*240+Math.sin(v*9)*20, 1, .2+v*0.45);
+    if(name==='mono')     return [v*255,v*255,v*255];
+    return rampSample(STOPS[name]||STOPS.viridis, v);
+  }
+  function updateSwatches(){ const sw=document.querySelectorAll('#swatches .sw');
+    [0.18,0.45,0.7,0.95].forEach((v,i)=>{ const c=colormap(S.colormap,v); sw[i].style.background='rgb('+(c[0]|0)+','+(c[1]|0)+','+(c[2]|0)+')'; }); }
+  updateSwatches();
+
+  // ---------- source loading ----------
+  function setSource(src){
+    img=src; imgLoaded=true; if(S.source==='noise'){ S.source='image'; document.getElementById('source').value='image'; document.getElementById('noiseGrp').style.display='none'; }
+    const ar=src.width/src.height;
+    // low-res sample buffer (warped reads); long side ~ 420
+    let bw,bh; if(ar>=1){ bw=420; bh=Math.round(420/ar); } else { bh=420; bw=Math.round(420*ar); }
+    sbw=bw; sbh=bh; sbuf.width=bw; sbuf.height=bh;
+    sctx.drawImage(src,0,0,bw,bh); srcData=sctx.getImageData(0,0,bw,bh).data;
+    resizeCanvas(); if(!playing) render();
+  }
+  function loadImg(s){ const im=new Image(); im.onload=()=>setSource(im); im.src=s; }
+  function fileLoad(f){ if(!f||!f.type.startsWith('image/'))return; const r=new FileReader(); r.onload=e=>loadImg(e.target.result); r.readAsDataURL(f); }
+
+  function resizeCanvas(){ if(!img)return; const maxW=1000,maxH=780; const ar=img.width/img.height;
+    let w=maxW, h=w/ar; if(h>maxH){ h=maxH; w=h*ar; }
+    canvas.width=Math.round(w); canvas.height=Math.round(h); }
+
+  document.getElementById('loadBtn').addEventListener('click',()=>document.getElementById('file').click());
+  document.getElementById('file').addEventListener('change',e=>fileLoad(e.target.files[0]));
+  const stage=document.getElementById('stage'), dh=document.getElementById('drophint');
+  ;['dragover','dragenter'].forEach(ev=>stage.addEventListener(ev,e=>{e.preventDefault();dh.classList.add('show')}));
+  ;['dragleave','drop'].forEach(ev=>stage.addEventListener(ev,e=>{e.preventDefault();dh.classList.remove('show')}));
+  stage.addEventListener('drop',e=>fileLoad(e.dataTransfer.files[0]));
+
+  // ---------- procedural background generator (never repeats) ----------
+  const STYLES=8, bgHistory=new Set(); let lastStyle=-1;
+  function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+  function buildField(style,r){
+    if(style===0){ const f1=4+r()*16,f2=4+r()*16,a1=r()*6.28,a2=r()*6.28,ang=r()*6.28,cs=Math.cos(ang),sn=Math.sin(ang);
+      return (x,y)=>{const u=x*cs-y*sn,v=x*sn+y*cs; return (Math.sin(u*f1+a1)+Math.sin(v*f2+a2)+Math.sin((x+y)*5))/3*0.5+0.5;}; }
+    if(style===1){ const n=3+(r()*5|0),p=[]; for(let i=0;i<n;i++)p.push([r(),r(),0.03+r()*0.07]);
+      return (x,y)=>{let s=0; for(const q of p){const dx=x-q[0],dy=y-q[1]; s+=q[2]/(dx*dx+dy*dy+0.0008);} return Math.min(1,s*0.16);}; }
+    if(style===2){ const n=5+(r()*10|0),s=[]; for(let i=0;i<n;i++)s.push([r(),r()]);
+      return (x,y)=>{let m=9; for(const q of s){const dx=x-q[0],dy=y-q[1],d=dx*dx+dy*dy; if(d<m)m=d;} return Math.min(1,Math.sqrt(m)*2.2);}; }
+    if(style===3){ const f=3+r()*8,w=2+r()*5,ph=r()*6.28;
+      return (x,y)=>{let v=Math.sin(x*f+Math.sin(y*f*0.7+ph)*w); return 0.5+0.5*Math.sin(v*3.14+x*3+y*2);}; }
+    if(style===4){ const f1=8+r()*24,f2=8+r()*24,a1=r()*6.28,a2=r()*6.28;
+      return (x,y)=>Math.sin(x*f1+a1)*Math.cos(y*f2+a2)*0.5+0.5; }
+    if(style===5){ const arms=2+(r()*6|0),tw=4+r()*10,cx=0.4+r()*0.2,cy=0.4+r()*0.2;
+      return (x,y)=>{const dx=x-cx,dy=y-cy; return 0.5+0.5*Math.sin(Math.atan2(dy,dx)*arms+Math.hypot(dx,dy)*tw*6.28);}; }
+    if(style===6){ const n=4+(r()*4|0),p=[]; for(let i=0;i<n;i++)p.push([r(),r(),0.12+r()*0.3]);
+      return (x,y)=>{let v=0; for(const q of p){const d=Math.hypot(x-q[0],y-q[1]); v=Math.max(v,1-d/q[2]);} return Math.max(0,Math.min(1,v));}; }
+    const cx=0.3+r()*0.4,cy=0.3+r()*0.4,fr=8+r()*30,ph=r()*6.28;
+    return (x,y)=>0.5+0.5*Math.sin(Math.hypot(x-cx,y-cy)*fr+ph);
+  }
+  function generateBackground(){
+    let style,seed,sig; do{ style=Math.random()*STYLES|0; seed=Math.random()*1e9|0; sig=style+':'+seed; }
+    while(bgHistory.has(sig)||style===lastStyle);
+    bgHistory.add(sig); lastStyle=style; flowSeed=Math.random()*1000;
+    const r=mulberry32(seed), field=buildField(style,r);
+    const base=560, W=base, H=(r()<0.45)?Math.round(base*(0.65+r()*0.7)):base;
+    const hueA=r()*360, spread=60+r()*240, sat=0.55+r()*0.4, lo=0.06+r()*0.1, hi=0.8+r()*0.18, swirl=r()*4;
+    const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+    const x=cv.getContext('2d'), id=x.createImageData(W,H), d=id.data;
+    for(let py=0;py<H;py++){ const ny=py/H; for(let px=0;px<W;px++){ const nx=px/W;
+      let v=field(nx,ny); v=v<0?0:v>1?1:v;
+      const c=hsl2rgb(hueA+v*spread+Math.sin((nx+ny)*swirl)*30, sat, lo+(hi-lo)*v), o=(py*W+px)<<2;
+      d[o]=c[0]; d[o+1]=c[1]; d[o+2]=c[2]; d[o+3]=255; } }
+    x.putImageData(id,0,0); setSource(cv);
+  }
+  function randomize(){ flowSeed=Math.random()*1000; noiseSeed=Math.random()*1000;
+    if(S.source==='image'){ generateBackground(); } else if(!playing){ render(); } }
+  document.getElementById('randomize').addEventListener('click',randomize);
+  document.getElementById('export').addEventListener('click',exportPNG);
+
+  // ---------- sampling + flow ----------
+  function sampleLum(u,v){ // returns [r,g,b,lum] from warped normalized coords
+    u=u<0?0:u>1?1:u; v=v<0?0:v>1?1:v;
+    const px=(u*(sbw-1))|0, py=(v*(sbh-1))|0, i=(py*sbw+px)<<2;
+    const r=srcData[i],g=srcData[i+1],b=srcData[i+2];
+    return [r,g,b,(r*0.299+g*0.587+b*0.114)/255];
+  }
+  function flowAt(u,v){ // smooth animated vector field
+    const s=flowSeed;
+    const fx=Math.sin(u*5.0+Math.cos(v*4.0+t+s)*1.6+t*0.8)+Math.sin(v*3.0-t*0.6+s)*0.6;
+    const fy=Math.cos(v*5.0+Math.sin(u*4.0-t+s)*1.6-t*0.7)+Math.cos(u*3.0+t*0.5+s)*0.6;
+    return [fx*0.5, fy*0.5];
+  }
+  function hash(i,j){ let h=(i*374761393+j*668265263+(flowSeed|0)*0x9e3779b1)|0; h=(h^(h>>>13))*1274126177; return ((h^(h>>>16))>>>0)/4294967296; }
+
+  // ---------- procedural noise field (liquid-metal source) ----------
+  function vhash(i,j){ let h=(i*374761393+j*668265263)|0; h=(h^(h>>>13))*1274126177; return ((h^(h>>>16))>>>0)/4294967296; }
+  function vnoise(x,y){ // smooth value noise 0..1
+    const xi=Math.floor(x), yi=Math.floor(y), xf=x-xi, yf=y-yi;
+    const u=xf*xf*(3-2*xf), v=yf*yf*(3-2*yf);
+    const a=vhash(xi,yi), b=vhash(xi+1,yi), c=vhash(xi+1,yi+1), d=vhash(xi,yi+1);
+    return a+(b-a)*u+(d-a)*v+(a-b-d+c)*u*v;
+  }
+  function fbm(x,y,oct){ let s=0,a=0.5,f=1,n=0; for(let i=0;i<oct;i++){ s+=a*vnoise(x*f,y*f); n+=a; f*=2; a*=0.5; } return s/n; }
+  function noiseField(u,v){ // smooth domain-warped marble -> metallic veins
+    const sc=S.nScale, warp=S.nWarp, oct=S.nOctaves, tt=t*0.18, ns=noiseSeed;
+    let x=u*sc+ns, y=v*sc-ns;
+    // gentle two-step domain warp keeps large, flowing shapes (no aliasing)
+    const q1=fbm(x+tt, y, oct)-0.5, q2=fbm(x+3.1, y+1.3-tt, oct)-0.5;
+    x+=warp*1.7*q1; y+=warp*1.7*q2;
+    let val=fbm(x+0.6, y-0.4, oct);
+    if(S.nVeins>0){ // smooth iridescent contour veins from the warped value
+      const band=0.5+0.5*Math.sin((val+q1*0.8)*6.2832*(1+S.nVeins*2.2));
+      val=val*(1-S.nVeins*0.85)+band*(S.nVeins*0.85);
+    }
+    return val<0?0:val>1?1:val;
+  }
+
+  function tone(v){ v+=S.brightness; v=(v-0.5)*S.contrast+0.5; v=v<0?0:v>1?1:v; v=Math.pow(v,S.gamma); return S.invertValues?1-v:v; }
+
+  // ---------- render ----------
+  function render(){
+    const noise=S.source==='noise';
+    if(!noise && !srcData){ return; }
+    const W=canvas.width, H=canvas.height, cell=S.cell;
+    cols=Math.max(2,Math.floor(W/cell)); rows=Math.max(2,Math.floor(H/cell));
+    const cw=W/cols, ch=H/rows, half=Math.min(cw,ch)/2;
+    ctx.fillStyle=S.bg; ctx.fillRect(0,0,W,H);
+
+    const flowAmt=(S.flow/100)*0.35, mode=S.mode, cfrom=S.colorFrom, cmap=S.colormap;
+    const cf=(S.centerFade/100)*0.85, diss=S.dissolve/100, sizeFrom=S.sizeFrom, dotScale=S.dotScale, invDot=S.invertDot;
+    const bayer=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+
+    for(let gy=0; gy<rows; gy++){
+      const v0=(gy+0.5)/rows;
+      for(let gx=0; gx<cols; gx++){
+        const u0=(gx+0.5)/cols;
+        // flow warps the image: sample source at displaced coords
+        let u=u0, v=v0;
+        if(flowAmt>0){ const f=flowAt(u0,v0); u=u0+f[0]*flowAmt; v=v0+f[1]*flowAmt; }
+        let s, raw;
+        if(noise){ raw=noiseField(u,v); } else { s=sampleLum(u,v); raw=s[3]; }
+        let val=tone(raw);
+
+        // mask: center fade punches a hole
+        const dist=Math.hypot(u0-0.5,v0-0.5)/0.707;
+        if(cf>0){ if(dist<cf-0.12) continue; const edge=(dist-(cf-0.12))/0.18; if(edge<1 && hash(gx,gy)>edge) continue; }
+
+        // dissolve: scatter / drop dots, strongest near the fade rim (skip in heatmap = keep it solid)
+        let jx=0, jy=0;
+        if(diss>0 && mode!=='heatmap'){ const rim=1-Math.min(1,Math.abs(dist-cf)/0.32); const drop=diss*(0.35+0.65*rim);
+          const hr=hash(gx*2+1,gy*3+7); if(hr<drop*0.7) continue;
+          jx=(hash(gx,gy+99)-0.5)*diss*cw*1.4; jy=(hash(gx+99,gy)-0.5)*diss*ch*1.4; }
+
+        if(val<=0.001 && mode!=='heatmap') continue;
+
+        // color
+        let cr,cg,cb;
+        if(cfrom==='image' && !noise){ const k=raw>0.001?val/raw:val; cr=s[0]*k; cg=s[1]*k; cb=s[2]*k; }
+        else if(cfrom==='mono'){ cr=cg=cb=val*255; }
+        else { const c=colormap(cmap,val); cr=c[0]; cg=c[1]; cb=c[2]; }
+        ctx.fillStyle='rgb('+(cr|0)+','+(cg|0)+','+(cb|0)+')';
+
+        const cx=(gx+0.5)*cw+jx, cy=(gy+0.5)*ch+jy;
+
+        if(mode==='heatmap'){ ctx.fillRect(gx*cw, gy*ch, cw+0.6, ch+0.6); continue; }
+        if(mode==='dither'){ const th=bayer[gx&3][gy&3]/16; if(val>th){ const r=half*0.7*dotScale; ctx.fillRect(cx-r,cy-r,r*2,r*2); } continue; }
+        // halftone
+        let sv = sizeFrom==='uniform'?0.8 : val; if(invDot) sv=1-sv;
+        const rad=half*dotScale*sv; if(rad<0.35) continue;
+        ctx.beginPath(); ctx.arc(cx,cy,rad,0,6.2832); ctx.fill();
+      }
+    }
+    statusEl.textContent=cols+' × '+rows+'  ·  '+(cols*rows).toLocaleString('en')+' cells';
+  }
+
+  function exportPNG(){ if(!canvas.width){return;} const a=document.createElement('a');
+    a.download='ditherlab_'+Date.now()+'.png'; a.href=canvas.toDataURL('image/png'); a.click(); }
+
+  // ---------- loop ----------
+  let last=performance.now(), acc=0, frames=0;
+  function loop(){ if(!playing)return;
+    const now=performance.now(), dt=(now-last)/1000; last=now;
+    t+=dt*S.speed*1.2; render();
+    frames++; acc+=dt; if(acc>=0.5){ fpsEl.textContent=Math.round(frames/acc)+' fps'; frames=0; acc=0; }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- keys ----------
+  window.addEventListener('keydown',e=>{
+    if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+    if(e.code==='Space'){ e.preventDefault(); playing=!playing; const tg=document.getElementById('animate');
+      tg.classList.toggle('on',playing); S.animate=playing; if(playing)loop(); else render(); }
+    else if(e.key==='r'||e.key==='R'){ randomize(); }
+    else if(e.key==='e'||e.key==='E'){ exportPNG(); }
+  });
+
+  playing=S.animate;
+  document.getElementById('noiseGrp').style.display = S.source==='noise'?'':'none';
+  if(S.source==='noise') sizeNoiseCanvas(); else generateBackground();
+  loop();
+})();
+</script>
+</body>
+</html>
