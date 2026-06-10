@@ -17,6 +17,12 @@ Web app de **dithering / halftone espectral** en HTML + Canvas, sin dependencias
 - **Motion**: animate · speed · **flow** (deforma la imagen con el campo animado)
 - **Mask**: center fade (abre un hueco) · dissolve (dispersa los puntos)
 - **Grid**: cell size, con lectura `cols × rows · N cells`
+- **Export (loop perfecto)**: duración · fps · resolución (supersampling 1×/2×/3×) y 4 formatos:
+  - **WebM (VP9)** y **MP4 (H.264)** — vídeo grabado del canvas, ideal para fondos web / visuales
+  - **PNG sequence (ZIP)** — fotogramas **sin pérdida**, máxima calidad para tu editor (After Effects/Premiere)
+  - **GIF** — preview rápido (256 colores)
+
+  La animación es periódica, así que el clip hace **loop sin costura** (el último fotograma empalma con el primero). Todo se genera en el navegador; nada se sube a ningún servidor.
 
 ## Atajos
 

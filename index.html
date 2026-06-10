@@ -97,6 +97,26 @@
   #drophint{position:absolute; inset:0; display:none; align-items:center; justify-content:center; font-size:13px;
     color:var(--txt); letter-spacing:1px; background:rgba(255,90,77,.12); border:2px dashed var(--acc)}
   #drophint.show{display:flex}
+
+  .seg{display:flex; gap:6px}
+  .seg button{flex:1; font-family:inherit; background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:6px; font-size:10px; padding:7px 4px; cursor:pointer}
+  .seg button.on{background:var(--acc); border-color:var(--acc); color:#1a0805; font-weight:700}
+  .expgrid{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+  .expgrid button{font-family:inherit; background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:6px; font-size:10px; padding:10px 6px; cursor:pointer; letter-spacing:.4px}
+  .expgrid button:hover:not(:disabled){border-color:var(--acc2)}
+  .expgrid button:disabled{opacity:.35; cursor:not-allowed}
+
+  #expOverlay{position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(5,5,6,.78); backdrop-filter:blur(3px); z-index:5}
+  #expOverlay.show{display:flex}
+  #expOverlay .card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:24px 28px;
+    text-align:center; min-width:240px}
+  #expMsg{font-size:12px; letter-spacing:1px; color:var(--txt); margin-bottom:14px}
+  .pbar{height:6px; border-radius:4px; background:#26262e; overflow:hidden}
+  .pbar i{display:block; height:100%; width:0; background:linear-gradient(90deg,var(--acc),var(--acc2)); transition:width .1s}
+  #expPct{font-size:11px; color:var(--mut); margin-top:9px; font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -252,6 +272,37 @@
           <input type="range" id="cell" min="4" max="48" step="1" value="16">
         </div>
       </div>
+
+      <!-- EXPORT -->
+      <div class="grp">
+        <div class="grp-h">09 · Export (loop)</div>
+        <div class="ctrl">
+          <div class="row"><label>Duración loop</label><span class="val" id="v-loopDur"></span></div>
+          <input type="range" id="loopDur" min="2" max="20" step="1" value="6">
+        </div>
+        <div class="ctrl">
+          <div class="row"><label>FPS</label><span class="val" id="v-exportFps"></span></div>
+          <input type="range" id="exportFps" min="12" max="60" step="1" value="30">
+        </div>
+        <div class="field">
+          <label>Resolución (supersampling)</label>
+          <div class="seg" id="scaleSeg">
+            <button data-v="1" class="on">1×</button>
+            <button data-v="2">2×</button>
+            <button data-v="3">3×</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Formato — loop perfecto</label>
+          <div class="expgrid">
+            <button id="exWebm">WebM · VP9</button>
+            <button id="exMp4">MP4 · H.264</button>
+            <button id="exPng">PNG seq · ZIP</button>
+            <button id="exGif">GIF</button>
+          </div>
+        </div>
+        <div class="help" id="expHelp">PNG seq = sin pérdida (máxima calidad, para tu editor). WebM/MP4 = ideal fondo web. GIF = preview (256 colores).</div>
+      </div>
     </div>
 
     <div class="foot">
@@ -270,6 +321,7 @@
     <div id="status">—</div>
     <div id="fps">— fps</div>
     <div id="drophint">Suelta la imagen aquí</div>
+    <div id="expOverlay"><div class="card"><div id="expMsg">Exportando…</div><div class="pbar"><i id="pfill"></i></div><div id="expPct">0%</div></div></div>
   </main>
 </div>
 
@@ -286,7 +338,8 @@
     invertValues:false, sizeFrom:'value', dotScale:1.06, invertDot:false,
     brightness:-0.10, contrast:1.52, gamma:0.80,
     animate:true, speed:0.60, flow:55,
-    centerFade:0, dissolve:49, cell:16
+    centerFade:0, dissolve:49, cell:16,
+    loopDur:6, exportFps:30, exportScale:1
   };
 
   let img=null, srcData=null, sbw=0, sbh=0, t=0, playing=true, flowSeed=Math.random()*1000;
@@ -311,6 +364,12 @@
   slider('nWarp','nWarp',v=>v.toFixed(2));
   slider('nOct','nOctaves',v=>Math.round(v));
   slider('nVeins','nVeins',v=>Math.round(v*100)+'%');
+  slider('loopDur','loopDur',v=>Math.round(v)+'s');
+  slider('exportFps','exportFps',v=>Math.round(v)+' fps');
+
+  document.querySelectorAll('#scaleSeg button').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('#scaleSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); S.exportScale=parseInt(b.dataset.v,10); }));
 
   function dropdown(id,key,after){ const el=document.getElementById(id);
     el.addEventListener('change',()=>{ S[key]=el.value; if(after)after(); if(!playing)render(); }); }
@@ -429,10 +488,10 @@
     const r=srcData[i],g=srcData[i+1],b=srcData[i+2];
     return [r,g,b,(r*0.299+g*0.587+b*0.114)/255];
   }
-  function flowAt(u,v){ // smooth animated vector field
-    const s=flowSeed;
-    const fx=Math.sin(u*5.0+Math.cos(v*4.0+t+s)*1.6+t*0.8)+Math.sin(v*3.0-t*0.6+s)*0.6;
-    const fy=Math.cos(v*5.0+Math.sin(u*4.0-t+s)*1.6-t*0.7)+Math.cos(u*3.0+t*0.5+s)*0.6;
+  function flowAt(u,v){ // smooth animated vector field — periodic in t∈[0,1) so it loops seamlessly
+    const s=flowSeed, a=6.2831853*t;
+    const fx=Math.sin(u*5.0+s+Math.cos(v*4.0+s+a)*1.6)+Math.sin(v*3.0+s-a)*0.6;
+    const fy=Math.cos(v*5.0+s+Math.sin(u*4.0+s-a)*1.6)+Math.cos(u*3.0+s+a)*0.6;
     return [fx*0.5, fy*0.5];
   }
   function hash(i,j){ let h=(i*374761393+j*668265263+(flowSeed|0)*0x9e3779b1)|0; h=(h^(h>>>13))*1274126177; return ((h^(h>>>16))>>>0)/4294967296; }
@@ -446,11 +505,12 @@
     return a+(b-a)*u+(d-a)*v+(a-b-d+c)*u*v;
   }
   function fbm(x,y,oct){ let s=0,a=0.5,f=1,n=0; for(let i=0;i<oct;i++){ s+=a*vnoise(x*f,y*f); n+=a; f*=2; a*=0.5; } return s/n; }
-  function noiseField(u,v){ // smooth domain-warped marble -> metallic veins
-    const sc=S.nScale, warp=S.nWarp, oct=S.nOctaves, tt=t*0.18, ns=noiseSeed;
+  function noiseField(u,v){ // smooth domain-warped marble -> metallic veins; periodic in t (loops)
+    const sc=S.nScale, warp=S.nWarp, oct=S.nOctaves, ns=noiseSeed, a=6.2831853*t;
+    const ax=0.4*Math.cos(a), ay=0.4*Math.sin(a);   // looping orbit offset = seamless animation
     let x=u*sc+ns, y=v*sc-ns;
     // gentle two-step domain warp keeps large, flowing shapes (no aliasing)
-    const q1=fbm(x+tt, y, oct)-0.5, q2=fbm(x+3.1, y+1.3-tt, oct)-0.5;
+    const q1=fbm(x+ax, y+ay, oct)-0.5, q2=fbm(x+3.1+ay, y+1.3-ax, oct)-0.5;
     x+=warp*1.7*q1; y+=warp*1.7*q2;
     let val=fbm(x+0.6, y-0.4, oct);
     if(S.nVeins>0){ // smooth iridescent contour veins from the warped value
@@ -521,11 +581,149 @@
   function exportPNG(){ if(!canvas.width){return;} const a=document.createElement('a');
     a.download='ditherlab_'+Date.now()+'.png'; a.href=canvas.toDataURL('image/png'); a.click(); }
 
+  // ================= EXPORT (loop perfecto) =================
+  let exporting=false, savedExp=null;
+  const ovl=document.getElementById('expOverlay'), pfill=document.getElementById('pfill'),
+        expMsg=document.getElementById('expMsg'), expPct=document.getElementById('expPct');
+  function showOverlay(m){ expMsg.textContent=m; pfill.style.width='0%'; expPct.textContent='0%'; ovl.classList.add('show'); }
+  function setProgress(p){ p=p<0?0:p>1?1:p; const s=Math.round(p*100)+'%'; pfill.style.width=s; expPct.textContent=s; }
+  function hideOverlay(){ ovl.classList.remove('show'); }
+  function setBusy(b){ ['exWebm','exMp4','exPng','exGif'].forEach(id=>{ const el=document.getElementById(id); if(el && !el.dataset.lock) el.disabled=b; }); }
+  function downloadBlob(blob,name){ const a=document.createElement('a'), u=URL.createObjectURL(blob);
+    a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),4000); }
+  const yield_=()=>new Promise(r=>setTimeout(r));
+
+  // temporarily render at higher resolution (true supersampling: scale canvas + cell together)
+  function beginExportRes(){ savedExp={w:canvas.width,h:canvas.height,cell:S.cell,playing,tt:t};
+    const sc=S.exportScale; if(sc>1){ canvas.width=savedExp.w*sc; canvas.height=savedExp.h*sc; S.cell=savedExp.cell*sc; } playing=false; }
+  function endExportRes(){ if(!savedExp)return; canvas.width=savedExp.w; canvas.height=savedExp.h; S.cell=savedExp.cell;
+    t=savedExp.tt; playing=savedExp.playing; const was=savedExp; savedExp=null; if(was.playing) loop(); else render(); }
+
+  // ---- WebM / MP4 via MediaRecorder (records one seamless loop in real time) ----
+  function webmMime(){ for(const m of ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']) if(window.MediaRecorder&&MediaRecorder.isTypeSupported(m)) return m; return 'video/webm'; }
+  function mp4Mime(){ for(const m of ['video/mp4;codecs=avc1.640028','video/mp4;codecs=avc1.42E01E','video/mp4']) if(window.MediaRecorder&&MediaRecorder.isTypeSupported(m)) return m; return null; }
+  async function exportVideo(mime,ext){
+    if(exporting||!canvas.width) return; exporting=true; setBusy(true);
+    showOverlay('Grabando '+ext.toUpperCase()+'…'); beginExportRes(); t=0; render();
+    const fps=Math.min(60,S.exportFps), dur=S.loopDur, N=Math.max(1,Math.round(dur*fps));
+    // captureStream(0) + requestFrame = frame-accurate; fall back to auto fps if unavailable
+    let stream, track, manual=false;
+    try{ stream=canvas.captureStream(0); track=stream.getVideoTracks()[0]; manual=!!(track&&track.requestFrame); }catch(e){}
+    if(!manual){ stream=canvas.captureStream(fps); track=stream.getVideoTracks()[0]; }
+    let rec; try{ rec=new MediaRecorder(stream,{mimeType:mime, videoBitsPerSecond:Math.round(16e6*S.exportScale)}); }
+    catch(e){ hideOverlay(); endExportRes(); setBusy(false); exporting=false; alert('Formato no soportado: '+ext); return; }
+    const chunks=[]; rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+    const stopped=new Promise(res=>rec.onstop=res);
+    rec.start(); const frameMs=1000/fps;
+    for(let i=0;i<N;i++){ t=i/N; render(); if(manual) track.requestFrame(); setProgress(i/N);
+      await new Promise(r=>setTimeout(r,frameMs)); }
+    t=0; render(); if(manual) track.requestFrame(); await new Promise(r=>setTimeout(r,frameMs));
+    rec.stop(); await stopped;
+    downloadBlob(new Blob(chunks,{type:mime}), 'ditherlab_'+Date.now()+'.'+ext);
+    hideOverlay(); endExportRes(); setBusy(false); exporting=false;
+  }
+
+  // ---- PNG sequence -> ZIP (lossless, máxima calidad) ----
+  const CRC=(()=>{ const t=new Uint32Array(256); for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c>>>0; } return t; })();
+  function crc32(b){ let c=0xFFFFFFFF; for(let i=0;i<b.length;i++) c=CRC[(c^b[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+  function makeZip(files){ // store (no compression) — PNGs are already compressed, stays lossless
+    const enc=new TextEncoder(), u16=v=>[v&255,(v>>8)&255], u32=v=>[v&255,(v>>8)&255,(v>>16)&255,(v>>24)&255];
+    const parts=[], central=[]; let offset=0;
+    for(const f of files){ const name=enc.encode(f.name), data=f.data, crc=crc32(data);
+      const lh=[].concat([0x50,0x4b,0x03,0x04],u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0));
+      const lb=new Uint8Array(lh.length+name.length+data.length); lb.set(lh,0); lb.set(name,lh.length); lb.set(data,lh.length+name.length);
+      parts.push(lb);
+      const ch=[].concat([0x50,0x4b,0x01,0x02],u16(20),u16(20),u16(0),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(name.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(offset));
+      const cb=new Uint8Array(ch.length+name.length); cb.set(ch,0); cb.set(name,ch.length); central.push(cb); offset+=lb.length; }
+    const cenSize=central.reduce((a,b)=>a+b.length,0);
+    const end=[].concat([0x50,0x4b,0x05,0x06],u16(0),u16(0),u16(files.length),u16(files.length),u32(cenSize),u32(offset),u16(0));
+    return new Blob([...parts,...central,new Uint8Array(end)],{type:'application/zip'});
+  }
+  async function exportPngSeq(){
+    if(exporting||!canvas.width) return; exporting=true; setBusy(true);
+    showOverlay('Renderizando PNG…'); beginExportRes();
+    const N=Math.max(1,Math.round(S.loopDur*S.exportFps)), files=[];
+    for(let i=0;i<N;i++){ t=i/N; render();
+      const blob=await new Promise(r=>canvas.toBlob(r,'image/png'));
+      files.push({name:'frame_'+String(i).padStart(4,'0')+'.png', data:new Uint8Array(await blob.arrayBuffer())});
+      setProgress((i+1)/N*0.92); await yield_(); }
+    showOverlay('Empaquetando ZIP…'); setProgress(0.97);
+    downloadBlob(makeZip(files), 'ditherlab_'+N+'f_'+S.exportFps+'fps.zip');
+    hideOverlay(); endExportRes(); setBusy(false); exporting=false;
+  }
+
+  // ---- GIF (median-cut palette + LZW; 256 colores) ----
+  function buildPalette(samples,max){ let boxes=[samples];
+    while(boxes.length<max){ let bi=-1,brange=-1,bch=0;
+      for(let i=0;i<boxes.length;i++){ const b=boxes[i]; if(b.length<2)continue;
+        const mn=[255,255,255],mx=[0,0,0];
+        for(const p of b)for(let c=0;c<3;c++){ if(p[c]<mn[c])mn[c]=p[c]; if(p[c]>mx[c])mx[c]=p[c]; }
+        for(let c=0;c<3;c++){ const r=mx[c]-mn[c]; if(r>brange){brange=r;bi=i;bch=c;} } }
+      if(bi<0)break; const box=boxes[bi]; box.sort((p,q)=>p[bch]-q[bch]); const mid=box.length>>1;
+      boxes.splice(bi,1,box.slice(0,mid),box.slice(mid)); }
+    return boxes.map(b=>{ let r=0,g=0,bl=0; for(const p of b){r+=p[0];g+=p[1];bl+=p[2];} const n=b.length||1;
+      return [Math.round(r/n),Math.round(g/n),Math.round(bl/n)]; });
+  }
+  function lzwEncode(min,data){ const out=[]; let buf=0,bits=0; const clear=1<<min, eoi=clear+1;
+    let dict,next,size; const init=()=>{ dict=new Map(); for(let i=0;i<clear;i++)dict.set(''+i,i); next=eoi+1; size=min+1; };
+    const emit=c=>{ buf|=c<<bits; bits+=size; while(bits>=8){ out.push(buf&255); buf>>=8; bits-=8; } };
+    init(); emit(clear); let prev=''+data[0];
+    for(let i=1;i<data.length;i++){ const k=data[i], key=prev+','+k;
+      if(dict.has(key)){ prev=key; }
+      else{ emit(dict.get(prev));
+        if(next<4096){ dict.set(key,next++); if(next===(1<<size)&&size<12) size++; }
+        else { emit(clear); init(); }
+        prev=''+k; } }
+    emit(dict.get(prev)); emit(eoi); if(bits>0) out.push(buf&255); return out;
+  }
+  async function exportGif(){
+    if(exporting||!canvas.width) return; exporting=true; setBusy(true);
+    showOverlay('Renderizando GIF…'); beginExportRes();
+    const fps=Math.min(50,S.exportFps), N=Math.max(1,Math.round(S.loopDur*fps)), W=canvas.width, H=canvas.height;
+    // pass 1: sample colors for a global palette
+    const sample=[], frameStep=Math.max(1,Math.floor(N/10)), pxStep=4*Math.max(1,Math.floor(W*H/1800));
+    for(let i=0;i<N;i++){ t=i/N; render();
+      if(i%frameStep===0){ const d=ctx.getImageData(0,0,W,H).data; for(let p=0;p<d.length;p+=pxStep) sample.push([d[p],d[p+1],d[p+2]]); }
+      setProgress((i+1)/N*0.4); await yield_(); }
+    const pal=buildPalette(sample,256); while(pal.length<256) pal.push([0,0,0]);
+    // 15-bit RGB -> palette index LUT
+    const lut=new Uint8Array(32768);
+    for(let r=0;r<32;r++)for(let g=0;g<32;g++)for(let b=0;b<32;b++){ const R=r<<3,G=g<<3,B=b<<3; let bi=0,bd=1e9;
+      for(let k=0;k<256;k++){ const dr=R-pal[k][0],dg=G-pal[k][1],db=B-pal[k][2],dd=dr*dr+dg*dg+db*db; if(dd<bd){bd=dd;bi=k;} }
+      lut[(r<<10)|(g<<5)|b]=bi; }
+    setProgress(0.5);
+    // assemble GIF89a
+    const bytes=[], push=(...a)=>{ for(const v of a) bytes.push(v&255); }, u16=v=>push(v&255,(v>>8)&255);
+    push(0x47,0x49,0x46,0x38,0x39,0x61); u16(W); u16(H); push(0xF7,0,0); // screen + global table (256)
+    for(let k=0;k<256;k++) push(pal[k][0],pal[k][1],pal[k][2]);
+    push(0x21,0xFF,0x0B); for(const ch of 'NETSCAPE2.0') push(ch.charCodeAt(0)); push(0x03,0x01,0x00,0x00,0x00); // loop forever
+    const delay=Math.max(2,Math.round(100/fps));
+    for(let i=0;i<N;i++){ t=i/N; render(); const d=ctx.getImageData(0,0,W,H).data, idx=new Uint8Array(W*H);
+      for(let p=0,q=0;q<idx.length;p+=4,q++) idx[q]=lut[((d[p]>>3)<<10)|((d[p+1]>>3)<<5)|(d[p+2]>>3)];
+      push(0x21,0xF9,0x04,0x04, delay&255,(delay>>8)&255, 0,0);   // graphic control (disposal 1, no transp)
+      push(0x2C,0,0,0,0); u16(W); u16(H); push(0);                // image descriptor
+      push(8); const lzw=lzwEncode(8,idx);                         // min code size 8
+      for(let o=0;o<lzw.length;o+=255){ const n=Math.min(255,lzw.length-o); push(n); for(let j=0;j<n;j++) push(lzw[o+j]); }
+      push(0);
+      setProgress(0.5+(i+1)/N*0.5); await yield_(); }
+    push(0x3B);
+    downloadBlob(new Blob([new Uint8Array(bytes)],{type:'image/gif'}), 'ditherlab_'+Date.now()+'.gif');
+    hideOverlay(); endExportRes(); setBusy(false); exporting=false;
+  }
+
+  // wire export buttons
+  document.getElementById('exWebm').addEventListener('click',()=>exportVideo(webmMime(),'webm'));
+  (()=>{ const m=mp4Mime(), btn=document.getElementById('exMp4');
+    if(m){ btn.addEventListener('click',()=>exportVideo(m,'mp4')); }
+    else { btn.disabled=true; btn.dataset.lock='1'; btn.textContent='MP4 (n/d)'; btn.title='Tu navegador no graba MP4. Usa WebM o PNG seq.'; } })();
+  document.getElementById('exPng').addEventListener('click',exportPngSeq);
+  document.getElementById('exGif').addEventListener('click',exportGif);
+
   // ---------- loop ----------
   let last=performance.now(), acc=0, frames=0;
   function loop(){ if(!playing)return;
     const now=performance.now(), dt=(now-last)/1000; last=now;
-    t+=dt*S.speed*1.2; render();
+    t=(t + dt*S.speed/Math.max(0.5,S.loopDur)) % 1; render();
     frames++; acc+=dt; if(acc>=0.5){ fpsEl.textContent=Math.round(frames/acc)+' fps'; frames=0; acc=0; }
     requestAnimationFrame(loop);
   }
