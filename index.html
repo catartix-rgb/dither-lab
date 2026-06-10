@@ -102,6 +102,17 @@
   .seg button{flex:1; font-family:inherit; background:var(--panel2); color:var(--txt); border:1px solid var(--line);
     border-radius:6px; font-size:10px; padding:7px 4px; cursor:pointer}
   .seg button.on{background:var(--acc); border-color:var(--acc); color:#1a0805; font-weight:700}
+  .fmtgrid{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+  .fmtgrid button{font-family:inherit; background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:6px; font-size:9.5px; padding:9px 4px; cursor:pointer; letter-spacing:.2px}
+  .fmtgrid button.on{background:var(--acc); border-color:var(--acc); color:#1a0805; font-weight:700}
+  .fmtgrid button:hover:not(.on){border-color:var(--acc2)}
+  .wh{display:flex; align-items:center; gap:8px}
+  .wh input{flex:1; min-width:0; font-family:inherit; background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:6px; font-size:11px; padding:8px 9px; outline:none}
+  .wh input:focus{border-color:var(--acc2)}
+  .wh span{color:var(--mut); font-size:11px}
+
   .expgrid{display:grid; grid-template-columns:1fr 1fr; gap:6px}
   .expgrid button{font-family:inherit; background:var(--panel2); color:var(--txt); border:1px solid var(--line);
     border-radius:6px; font-size:10px; padding:10px 6px; cursor:pointer; letter-spacing:.4px}
@@ -273,9 +284,32 @@
         </div>
       </div>
 
+      <!-- FORMATO -->
+      <div class="grp">
+        <div class="grp-h">09 · Formato</div>
+        <div class="field">
+          <label>Presets</label>
+          <div class="fmtgrid" id="fmtPresets">
+            <button data-w="1080" data-h="1920">9:16 · 1080×1920</button>
+            <button data-w="1920" data-h="1080">16:9 · 1920×1080</button>
+            <button data-w="1080" data-h="1080">1:1 · 1080×1080</button>
+            <button data-w="1080" data-h="1350">4:5 · 1080×1350</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Personalizado (px)</label>
+          <div class="wh">
+            <input type="number" id="fmtW" min="64" max="4096" step="1" value="1920">
+            <span>×</span>
+            <input type="number" id="fmtH" min="64" max="4096" step="1" value="1080">
+          </div>
+        </div>
+        <div class="help">El lienzo y la exportación usan este formato. Combínalo con Resolución (supersampling) para más nitidez.</div>
+      </div>
+
       <!-- EXPORT -->
       <div class="grp">
-        <div class="grp-h">09 · Export (loop)</div>
+        <div class="grp-h">10 · Export (loop)</div>
         <div class="ctrl">
           <div class="row"><label>Duración loop</label><span class="val" id="v-loopDur"></span></div>
           <input type="range" id="loopDur" min="2" max="20" step="1" value="6">
@@ -339,6 +373,7 @@
     brightness:-0.10, contrast:1.52, gamma:0.80,
     animate:true, speed:0.60, flow:55,
     centerFade:0, dissolve:49, cell:16,
+    formatW:1920, formatH:1080,
     loopDur:6, exportFps:30, exportScale:1
   };
 
@@ -369,7 +404,19 @@
 
   document.querySelectorAll('#scaleSeg button').forEach(b=>b.addEventListener('click',()=>{
     document.querySelectorAll('#scaleSeg button').forEach(x=>x.classList.remove('on'));
-    b.classList.add('on'); S.exportScale=parseInt(b.dataset.v,10); }));
+    b.classList.add('on'); S.exportScale=parseInt(b.dataset.v,10); if(!playing) render(); }));
+
+  // ---- format / canvas size ----
+  function setFormat(w,h){
+    S.formatW=Math.max(64,Math.min(4096,Math.round(w))); S.formatH=Math.max(64,Math.min(4096,Math.round(h)));
+    document.getElementById('fmtW').value=S.formatW; document.getElementById('fmtH').value=S.formatH;
+    document.querySelectorAll('#fmtPresets button').forEach(b=>
+      b.classList.toggle('on', +b.dataset.w===S.formatW && +b.dataset.h===S.formatH));
+    applyFormat();
+  }
+  document.querySelectorAll('#fmtPresets button').forEach(b=>b.addEventListener('click',()=>setFormat(+b.dataset.w,+b.dataset.h)));
+  document.getElementById('fmtW').addEventListener('change',e=>setFormat(+e.target.value||S.formatW, S.formatH));
+  document.getElementById('fmtH').addEventListener('change',e=>setFormat(S.formatW, +e.target.value||S.formatH));
 
   function dropdown(id,key,after){ const el=document.getElementById(id);
     el.addEventListener('change',()=>{ S[key]=el.value; if(after)after(); if(!playing)render(); }); }
@@ -377,10 +424,14 @@
   dropdown('colormap','colormap',updateSwatches);
   dropdown('sizeFrom','sizeFrom');
   dropdown('source','source',()=>{ document.getElementById('noiseGrp').style.display = S.source==='noise'?'':'none';
-    if(S.source==='noise' && !img) sizeNoiseCanvas();
-    else if(S.source==='image' && !imgLoaded) generateBackground(); });
+    if(S.source==='noise' && !img) applyFormat();
+    else if(S.source==='image' && !imgLoaded) generateBackground();
+    else applyFormat(); });
   let imgLoaded=false;
-  function sizeNoiseCanvas(){ canvas.width=960; canvas.height=720; }
+  // size the live canvas to the chosen format (long side capped for snappy preview)
+  function applyFormat(){ const fw=S.formatW, fh=S.formatH, long=960;
+    let w,h; if(fw>=fh){ w=long; h=Math.round(long*fh/fw); } else { h=long; w=Math.round(long*fw/fh); }
+    canvas.width=w; canvas.height=h; if(!playing) render(); }
 
   function toggle(id){ const el=document.getElementById(id), k=el.dataset.k;
     el.addEventListener('click',()=>{ el.classList.toggle('on'); S[k]=el.classList.contains('on');
@@ -424,14 +475,10 @@
     let bw,bh; if(ar>=1){ bw=420; bh=Math.round(420/ar); } else { bh=420; bw=Math.round(420*ar); }
     sbw=bw; sbh=bh; sbuf.width=bw; sbuf.height=bh;
     sctx.drawImage(src,0,0,bw,bh); srcData=sctx.getImageData(0,0,bw,bh).data;
-    resizeCanvas(); if(!playing) render();
+    applyFormat();
   }
   function loadImg(s){ const im=new Image(); im.onload=()=>setSource(im); im.src=s; }
   function fileLoad(f){ if(!f||!f.type.startsWith('image/'))return; const r=new FileReader(); r.onload=e=>loadImg(e.target.result); r.readAsDataURL(f); }
-
-  function resizeCanvas(){ if(!img)return; const maxW=1000,maxH=780; const ar=img.width/img.height;
-    let w=maxW, h=w/ar; if(h>maxH){ h=maxH; w=h*ar; }
-    canvas.width=Math.round(w); canvas.height=Math.round(h); }
 
   document.getElementById('loadBtn').addEventListener('click',()=>document.getElementById('file').click());
   document.getElementById('file').addEventListener('change',e=>fileLoad(e.target.files[0]));
@@ -575,7 +622,8 @@
         ctx.beginPath(); ctx.arc(cx,cy,rad,0,6.2832); ctx.fill();
       }
     }
-    statusEl.textContent=cols+' × '+rows+'  ·  '+(cols*rows).toLocaleString('en')+' cells';
+    const outW=Math.round(S.formatW*S.exportScale), outH=Math.round(S.formatH*S.exportScale);
+    statusEl.textContent=outW+'×'+outH+' out  ·  '+cols+'×'+rows+' cells';
   }
 
   function exportPNG(){ if(!canvas.width){return;} const a=document.createElement('a');
@@ -595,7 +643,9 @@
 
   // temporarily render at higher resolution (true supersampling: scale canvas + cell together)
   function beginExportRes(){ savedExp={w:canvas.width,h:canvas.height,cell:S.cell,playing,tt:t};
-    const sc=S.exportScale; if(sc>1){ canvas.width=savedExp.w*sc; canvas.height=savedExp.h*sc; S.cell=savedExp.cell*sc; } playing=false; }
+    // render at the real format × supersampling, scaling cell so the composition stays identical (WYSIWYG)
+    const tw=Math.round(S.formatW*S.exportScale), th=Math.round(S.formatH*S.exportScale);
+    const r=tw/canvas.width; S.cell=savedExp.cell*r; canvas.width=tw; canvas.height=th; playing=false; }
   function endExportRes(){ if(!savedExp)return; canvas.width=savedExp.w; canvas.height=savedExp.h; S.cell=savedExp.cell;
     t=savedExp.tt; playing=savedExp.playing; const was=savedExp; savedExp=null; if(was.playing) loop(); else render(); }
 
@@ -739,7 +789,8 @@
 
   playing=S.animate;
   document.getElementById('noiseGrp').style.display = S.source==='noise'?'':'none';
-  if(S.source==='noise') sizeNoiseCanvas(); else generateBackground();
+  setFormat(S.formatW, S.formatH);                 // init format inputs + highlight + size canvas
+  if(S.source!=='noise') generateBackground();
   loop();
 })();
 </script>
